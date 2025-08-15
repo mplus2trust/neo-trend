@@ -1,0 +1,230 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © mplus2trust
+
+//@version=5
+// This Pine Script® file contains portions derived from MPL-2.0 licensed work(s).
+// This Source Code Form is subject to the terms of the Mozilla Public License v2.0:
+// https://mozilla.org/MPL/2.0/
+//
+// Full source (including modifications and NOTICE) available at:
+// https://github.com/mplus2trust/neo-trend
+
+indicator(title="FXWIZ Neo Trend", overlay=false, max_bars_back=4999)
+
+//=====================================================
+// FXWIZ Neo Trend  (Invite-Only on TradingView)
+//-----------------------------------------------------
+// DESCRIPTION
+// - Signals fire only when all enabled filters align.
+// - Panel shows NeoTrend ribbon; entry highlights are projected onto the price
+//   chart using `force_overlay` while overlay=false.
+//
+// CREDITS & NOTICES
+// - Portions adapted from community code released under MPL-2.0.
+// - See repository NOTICE for acknowledgements and change logs.
+//
+// TERMS
+// - Invite-Only distribution on TradingView; license compliance via public repo.
+// - Not financial advice; trading involves risk.
+//
+// Author: Kai Kim (FXWIZ) with Genie
+// Version: 1.0 | Last Updated: 2025-08-08
+//=====================================================
+
+
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SETTINGS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+groupCore   = "Core Settings"
+groupVisual = "Visual Settings"
+groupVOL    = "NeoVolume Settings"
+groupEMD    = "EMD Trend Settings"
+groupSig    = "Signal Settings"
+
+ma_type    = input.string("EMA", title="➤ MA Type", options=["SMA","EMA","WMA"], group=groupCore)
+ma_length  = input.int(14, minval=5, title="➤ MA Length", group=groupCore)
+src_price  = input.source(close, title="➤ Price Source", group=groupCore)
+
+show_BG    = input.bool(true,  title="➤ Show Trend Flow (Ribbon)", group=groupVisual)
+show_back  = input.bool(true,  title="➤ Show Background (Panel)",  group=groupVisual)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MACD 30m Filter (toggle)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Toggle to require MACD histogram on 30-minute timeframe
+// to be bullish for buy signals or bearish for sell signals.
+// Disable to ignore MACD filter.
+
+useMACD30 = input.bool(true, title="➤ Use 30m MACD filter", group=groupSig)
+
+// 30m MACD (12.26.9)
+[macd30, signal30, hist30] = request.security(syminfo.tickerid, "30", ta.macd(src_price, 12, 26, 9))
+isMACD30Bull = hist30 > 0    
+isMACD30Bear = hist30 < 0
+
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// NeoTrend (original preserved / channel breakout)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ma =
+     ma_type == "SMA" ? ta.sma(src_price, ma_length) :
+     ma_type == "EMA" ? ta.ema(src_price, ma_length) :
+     ta.wma(src_price, ma_length)
+
+channel_period = ma_length * 2
+upper_channel  = ta.highest(ma, channel_period)
+lower_channel  = ta.lowest(ma, channel_period)
+
+var int trend_direction = 0
+trend_direction := src_price > upper_channel[1] ? 1 :
+                   src_price < lower_channel[1] ? -1 :
+                   trend_direction[1]
+
+// Reversal (no shift)
+bullish_reversal = trend_direction == 1  and trend_direction[1] != 1
+bearish_reversal = trend_direction == -1 and trend_direction[1] != -1
+
+// Panel visuals (ribbon + background)
+// (channel lines hidden; fill still works)
+channel_color = show_BG ? color.new(color.white, 0) : na
+ribbon_color  = show_BG ? (trend_direction == 1 ? color.new(color.green, 0) : trend_direction == -1 ? color.new(color.red, 0) : color.new(color.gray, 0)) : na
+bg_color_up   = show_back and trend_direction == 1  ? color.new(color.green, 85) : na
+bg_color_dn   = show_back and trend_direction == -1 ? color.new(color.red,   85) : na
+
+// VISUALIZATION ON CHART
+
+plot_ma    = plot(ma, title="Neo Moving Average", color=ribbon_color, linewidth=1, style=plot.style_stepline, display=display.none, editable=false)
+plot_upper = plot(upper_channel, title="Upper Channel", color=channel_color, linewidth=1, style=plot.style_stepline, force_overlay= true)
+plot_lower = plot(lower_channel, title="Lower Channel", color=channel_color, linewidth=1, style=plot.style_stepline, force_overlay= true)
+
+plotchar(bullish_reversal, title="Neo Buy Signal", char='⮝', location=location.belowbar, color=#3ad8ff, size=size.small, force_overlay= true)
+plotchar(bearish_reversal, title="Neo Sell Signal", char='⮟', location=location.abovebar, color=#b835ff, size=size.small, force_overlay= true)
+
+bgcolor(trend_direction == 1 ? color.new(#16ea75, 40) : trend_direction == -1 ? color.new(#ff0000, 40) : na) // Pane trend color
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// NeoVolume (original color logic; ghost=black)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Volume color classification inspired by publicly discussed techniques.
+// Implemented from scratch; no third-party source code included.
+
+vol_len      = input.int(200, title="NeoVolume • Length", group=groupVOL)
+HV_ma        = input.int(9,   title="NeoVolume • HV MA", group=groupVOL)
+divisor      = input.float(3.6, title="NeoVolume • Divisor", group=groupVOL)
+
+price_range  = high - low
+rangeAvg     = ta.sma(price_range, vol_len)
+volumeA      = ta.sma(volume, vol_len)
+durchschnitt = ta.sma(volume, HV_ma)
+
+high1 = high[1]
+low1  = low[1]
+mid1  = hl2[1]
+
+u1 = mid1 + (high1 - low1) / divisor
+d1 = mid1 - (high1 - low1) / divisor
+
+r_enabled1 = (price_range > rangeAvg) and (close < d1) and (volume > volumeA)
+r_enabled2 = close < mid1
+r_enabled  = r_enabled1 or r_enabled2
+
+g_enabled1 = close > mid1
+g_enabled2 = (price_range > rangeAvg) and (close > u1) and (volume > volumeA)
+g_enabled3 = (high > high1) and (price_range < rangeAvg / 1.5) and (volume < volumeA)
+g_enabled4 = (low < low1) and (price_range < rangeAvg / 1.5) and (volume > volumeA)
+g_enabled  = g_enabled1 or g_enabled2 or g_enabled3 or g_enabled4
+
+gr_enabled1 = (price_range > rangeAvg) and (close > d1) and (close < u1) and (volume > volumeA) and (volume < volumeA * 1.5) and (volume > volume[1])
+gr_enabled2 = (price_range < rangeAvg / 1.5) and (volume < volumeA / 1.5)
+gr_enabled3 = (close > d1) and (close < u1)
+gr_enabled  = gr_enabled1 or gr_enabled2 or gr_enabled3
+
+v_color = gr_enabled ? #000000 : g_enabled ? color.rgb(27, 223, 34) : r_enabled ? #ff3030 : #000000
+
+var color NEO_VOL_GREEN = color.rgb(27, 223, 34)
+var color NEO_VOL_RED   = #ff3030
+var color NEO_VOL_GHOST = #000000
+
+isVolumeGreen = (v_color == NEO_VOL_GREEN)
+isVolumeRed   = (v_color == NEO_VOL_RED)
+isVolumeGhost = (v_color == NEO_VOL_GHOST)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EMD Trend (candle coloring only)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Custom EMD-like channel (original FXWIZ implementation).
+// Uses moving average + exponential mean absolute deviation as band width.
+// No third-party source code included.
+
+src_option   = input.string("close", "EMD • Source", options=["open","high","low","close","hl2","hlc3","ohlc4"], group=groupEMD)
+avg_length   = input.int(28, "EMD • Length", minval=1, group=groupEMD)
+multiplier   = input.float(1.0, "EMD • Deviation Multiplier", minval=0.05, step=0.05, group=groupEMD)
+avg_type     = input.string("SMA", "EMD • MA Type", options=["SMA","EMA"], group=groupEMD)
+
+color_bull   = input.color(color.rgb(54,208,19), "EMD • Bull Candle", group=groupEMD)
+color_bear   = input.color(color.rgb(227,34,34), "EMD • Bear Candle", group=groupEMD)
+
+get_src(str) =>
+    switch str
+        "open"  => open
+        "high"  => high
+        "low"   => low
+        "close" => close
+        "hl2"   => hl2
+        "hlc3"  => hlc3
+        "ohlc4" => ohlc4
+        => close
+
+get_avg(src, len, typ) =>
+    switch typ
+        "SMA" => ta.sma(src, len)
+        "EMA" => ta.ema(src, len)
+        => ta.sma(src, len)
+
+emd(src, base, len) =>
+    abs_dev = math.abs(src - base)
+    ta.ema(abs_dev, len)
+
+srcEMD   = get_src(src_option)
+avgEMD   = get_avg(srcEMD, avg_length, avg_type)
+devEMD   = emd(srcEMD, avgEMD, avg_length)
+upperEMD = avgEMD + devEMD * multiplier
+lowerEMD = avgEMD - devEMD * multiplier
+
+var int dirEMD = 0
+if ta.crossover(srcEMD, upperEMD)
+    dirEMD := 1
+else if ta.crossunder(srcEMD, lowerEMD)
+    dirEMD := -1
+else
+    dirEMD := nz(dirEMD[1])
+
+// Candle coloring on main price chart (no triangles)
+barcolor(dirEMD == 1 ? color_bull : dirEMD == -1 ? color_bear : na)
+
+isEMDGreen = (dirEMD == 1)
+isEMDRed   = (dirEMD == -1)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Final Signal (no shift; ghost pass)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// A signal is valid only when:
+//  1) NeoTrend reversal
+//  2) NeoVolume color match (non-ghost)
+//  3) EMD trend candle match
+//  4) (Optional) 30m MACD direction match
+
+finalBullSignal = bullish_reversal and isVolumeGreen and not isVolumeGhost and isEMDGreen and (not useMACD30 or isMACD30Bull)
+finalBearSignal = bearish_reversal and isVolumeRed   and not isVolumeGhost and isEMDRed   and (not useMACD30 or isMACD30Bear)
+
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Entry BG on main chart (NeoEntry style, one-liners, opacity 85)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    
+bgcolor(finalBullSignal ? color.new(color.rgb(2, 252, 10), 90) : na, force_overlay=true)
+bgcolor(finalBearSignal ? color.new(color.red, 86) : na, force_overlay=true)

@@ -1,0 +1,28 @@
+FXWIZ Neo Trend Indicator
+=========================
+
+This project contains portions of logic inspired by, or adapted from,
+publicly available Pine Script® code released under the Mozilla Public
+License 2.0 (MPL-2.0).
+
+Where original authors could be identified, credit has been given in
+the source code comments. However, certain fragments were found in
+public domain or open community forums without explicit author names.
+
+Acknowledgements:
+-----------------
+- Portions of moving average and channel logic are common in Pine Script
+  community indicators and may resemble works shared in public forums.
+- Volume color classification logic is inspired by various publicly
+  discussed techniques in trading communities, with no single identifiable
+  author.
+- EMD-like channel logic is an original implementation by FXWIZ, based on
+  general mathematical concepts, not sourced from proprietary code.
+
+License:
+--------
+This project is distributed under the terms of the Mozilla Public License 2.0.
+A copy of the license is available at: https://mozilla.org/MPL/2.0/
+
+Per MPL-2.0 requirements, this repository contains the complete corresponding
+source code, including any modifications made by FXWIZ.
